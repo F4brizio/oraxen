@@ -14,10 +14,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
-
-import java.lang.reflect.InvocationTargetException;
 
 public class AdvancedPackSender extends PackSender implements Listener {
 
@@ -27,20 +26,18 @@ public class AdvancedPackSender extends PackSender implements Listener {
     public AdvancedPackSender(HostingProvider hostingProvider) {
         super(hostingProvider);
         protocolManager = ProtocolLibrary.getProtocolManager();
-
         component = WrappedChatComponent.fromJson(GsonComponentSerializer.gson()
-                .serialize(Utils.MINI_MESSAGE
-                        .parse(Settings.SEND_PACK_ADVANCED_MESSAGE.toString())));
+                .serialize(Utils.MINI_MESSAGE.deserialize(Settings.SEND_PACK_ADVANCED_MESSAGE.toString())));
     }
 
     @Override
     public void register() {
-        if (Settings.SEND_PACK.toBool())
-            Bukkit.getPluginManager().registerEvents(this, OraxenPlugin.get());
+        Bukkit.getPluginManager().registerEvents(this, OraxenPlugin.get());
     }
 
     @Override
     public void unregister() {
+        HandlerList.unregisterAll(this);
     }
 
     @Override
@@ -50,27 +47,19 @@ public class AdvancedPackSender extends PackSender implements Listener {
         handle.getStrings().write(1, hostingProvider.getOriginalSHA1());
         handle.getBooleans().write(0, Settings.SEND_PACK_ADVANCED_MANDATORY.toBool());
         handle.getChatComponents().write(0, component);
-        try {
-            protocolManager.sendServerPacket(player, handle);
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        }
+        protocolManager.sendServerPacket(player, handle);
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerConnect(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
         if (Settings.SEND_JOIN_MESSAGE.toBool())
-            sendWelcomeMessage(event.getPlayer(), true);
+            sendWelcomeMessage(player, true);
         if (Settings.SEND_PACK.toBool()) {
             int delay = (int) Settings.SEND_PACK_DELAY.getValue();
-            if(delay < 1)
-                sendPack(event.getPlayer());
-            else
-                Bukkit
-                        .getScheduler()
-                        .runTaskLaterAsynchronously(OraxenPlugin.get(),
-                                () -> sendPack(event.getPlayer()),
-                                delay * 20L);
+            if (delay < 1) sendPack(player);
+            else Bukkit.getScheduler().runTaskLaterAsynchronously(OraxenPlugin.get(),
+                    () -> sendPack(player), delay * 20L);
         }
     }
 

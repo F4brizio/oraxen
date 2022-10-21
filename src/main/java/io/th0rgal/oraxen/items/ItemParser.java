@@ -2,6 +2,7 @@ package io.th0rgal.oraxen.items;
 
 import io.th0rgal.oraxen.OraxenPlugin;
 import io.th0rgal.oraxen.compatibilities.provided.mmoitems.WrappedMMOItem;
+import io.th0rgal.oraxen.compatibilities.provided.mythiccrucible.WrappedCrucibleItem;
 import io.th0rgal.oraxen.config.Settings;
 import io.th0rgal.oraxen.mechanics.Mechanic;
 import io.th0rgal.oraxen.mechanics.MechanicFactory;
@@ -23,7 +24,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.zip.Deflater;
 
 public class ItemParser {
 
@@ -33,15 +33,17 @@ public class ItemParser {
     private final ConfigurationSection section;
     private Material type;
     private WrappedMMOItem mmoItem;
+    private WrappedCrucibleItem crucibleItem;
     private boolean configUpdated = false;
 
     public ItemParser(ConfigurationSection section) {
         this.section = section;
 
-        if (section.isConfigurationSection("MMOItems"))
-            mmoItem = new WrappedMMOItem(section.getConfigurationSection("MMOItems"));
-        else
-            type = Material.getMaterial(section.getString("material"));
+        if (section.isConfigurationSection("crucible"))
+            crucibleItem = new WrappedCrucibleItem(section.getConfigurationSection("crucible"));
+        else if (section.isConfigurationSection("mmoitem"))
+            mmoItem = new WrappedMMOItem(section.getConfigurationSection("mmoitem"));
+        else type = Material.getMaterial(section.getString("material"));
 
         oraxenMeta = new OraxenMeta();
         if (section.isConfigurationSection("Pack")) {
@@ -56,12 +58,15 @@ public class ItemParser {
     }
 
     public boolean usesMMOItems() {
-        return type == null;
+        return type == null && crucibleItem == null;
+    }
+
+    public boolean usesCrucibleItems() {
+        return type == null && mmoItem == null;
     }
 
     private String parseComponentString(String miniString) {
-        return Utils.LEGACY_COMPONENT_SERIALIZER.serialize(Utils.MINI_MESSAGE
-                .parse(miniString));
+        return Utils.LEGACY_COMPONENT_SERIALIZER.serialize(Utils.MINI_MESSAGE.deserialize(miniString));
     }
 
     public ItemBuilder buildItem() {
@@ -69,7 +74,11 @@ public class ItemParser {
     }
 
     public ItemBuilder buildItem(String name) {
-        ItemBuilder item = usesMMOItems() ? new ItemBuilder(mmoItem) : new ItemBuilder(type);
+        ItemBuilder item;
+        if (usesCrucibleItems()) item = new ItemBuilder(crucibleItem);
+        else if (usesMMOItems()) item = new ItemBuilder(mmoItem);
+        else item = new ItemBuilder(type);
+
         if (name != null)
             item.setDisplayName(name);
         return applyConfig(item);
@@ -82,8 +91,7 @@ public class ItemParser {
 
         if (section.contains("lore")) {
             List<String> lore = section.getStringList("lore");
-            for (int i = 0; i < lore.size(); i++)
-                lore.set(i, parseComponentString(lore.get(i)));
+            lore.replaceAll(this::parseComponentString);
             item.setLore(lore);
         }
 
@@ -92,11 +100,10 @@ public class ItemParser {
 
         if (section.contains("color")) {
             String[] colors = section.getString("color").split(", ");
-            item
-                    .setColor(org.bukkit.Color
-                            .fromRGB(Integer.parseInt(colors[0]),
-                                    Integer.parseInt(colors[1]),
-                                    Integer.parseInt(colors[2])));
+            item.setColor(org.bukkit.Color.fromRGB(
+                    Integer.parseInt(colors[0]),
+                    Integer.parseInt(colors[1]),
+                    Integer.parseInt(colors[2])));
         }
 
         parseMiscOptions(item);
@@ -132,8 +139,10 @@ public class ItemParser {
             @SuppressWarnings("unchecked") // because this sections must always return a List<LinkedHashMap<String, ?>>
             List<LinkedHashMap<String, Object>> potionEffects = (List<LinkedHashMap<String, Object>>) section
                     .getList("PotionEffects");
+            if (potionEffects == null) return;
             for (Map<String, Object> serializedPotionEffect : potionEffects) {
                 PotionEffectType effect = PotionEffectType.getByName((String) serializedPotionEffect.get("type"));
+                if (effect == null) return;
                 int duration = (int) serializedPotionEffect.get("duration");
                 int amplifier = (int) serializedPotionEffect.get("amplifier");
                 boolean ambient = (boolean) serializedPotionEffect.get("ambient");

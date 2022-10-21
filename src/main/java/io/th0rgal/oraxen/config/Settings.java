@@ -9,11 +9,14 @@ public enum Settings {
 
     PLUGIN_LANGUAGE("Plugin.language"),
     REPAIR_COMMAND_ORAXEN_DURABILITY("Plugin.commands.repair.oraxen_durability_only"),
+    GENERATE_DEFAULT_ASSETS("Plugin.generation.default_assets"),
+    GENERATE_DEFAULT_CONFIGS("Plugin.generation.default_configs"),
 
     CONFIGS_VERSION("configs_version"),
     UPDATE_CONFIGS("ConfigsTools.enable_configs_updater"),
     AUTOMATICALLY_SET_GLYPH_CODE("ConfigsTools.automatically_set_glyph_code"),
     AUTOMATICALLY_SET_MODEL_DATA("ConfigsTools.automatically_set_model_data"),
+    SKIPPED_MODEL_DATA_NUMBERS("ConfigsTools.skipped_model_data_numbers"),
     ERROR_ITEM("ConfigsTools.error_item"),
 
     RESET_RECIPES("Misc.reset_recipes"),
@@ -25,6 +28,7 @@ public enum Settings {
 
     GENERATE("Pack.generation.generate"),
     ARMOR_RESOLUTION("Pack.generation.armor_resolution"),
+    AUTOMATICALLY_GENERATE_SHADER_COMPATIBLE_ARMOR("Pack.generation.automatically_generate_shader_compatible_armor"),
     COMPRESSION("Pack.generation.compression"),
     PROTECTION("Pack.generation.protection"),
     COMMENT("Pack.generation.comment"),

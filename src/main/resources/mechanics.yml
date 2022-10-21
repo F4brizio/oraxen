@@ -21,8 +21,17 @@ itemtype:
 soulbound:
   enabled: true
 
+backpack:
+  enabled: true
+
 
 # GAMEPLAY
+
+# Specify if custom block sounds should be enabled for the below mechanics
+# If both mechanics are disabled, this will force the sound system for those off
+custom_block_sounds:
+  noteblock_and_block: true
+  stringblock_and_furniture: true
 
 # legacy blocks using mushroom stems, prefer to use noteblock
 block:
@@ -43,6 +52,8 @@ noteblock:
     - GOLDEN
     - DIAMOND
     - NETHERITE
+    - # ticks between each check for dryout
+  farmblock_check_delay: 1000
   enabled: true
 
 stringblock:
@@ -53,6 +64,7 @@ stringblock:
       - GOLDEN
       - DIAMOND
       - NETHERITE
+    sapling_growth_check_delay: 4000
     enabled: true
 
 # Only 1.16+
@@ -77,6 +89,9 @@ efficiency:
 repair:
   enabled: true
   oraxen_durability_only: false
+
+food:
+  enabled: true
 
 
 # COSMETIC
@@ -133,4 +148,7 @@ bedrockbreak:
   durability_cost: 500
 
 harvesting:
+  enabled: true
+
+watering:
   enabled: true

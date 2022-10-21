@@ -3,7 +3,7 @@ package io.th0rgal.oraxen.items;
 import io.th0rgal.oraxen.OraxenPlugin;
 import io.th0rgal.oraxen.config.ConfigsManager;
 import io.th0rgal.oraxen.config.Message;
-import net.kyori.adventure.text.minimessage.Template;
+import io.th0rgal.oraxen.utils.Utils;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class OraxenItems {
+
+    private OraxenItems() {}
 
     public static final NamespacedKey ITEM_ID = new NamespacedKey(OraxenPlugin.get(), "id");
     // configuration sections : their OraxenItem wrapper
@@ -49,6 +51,10 @@ public class OraxenItems {
         return entryStream().anyMatch(entry -> entry.getKey().equals(itemId));
     }
 
+    public static boolean exists(final ItemStack itemStack) {
+        return entryStream().anyMatch(entry -> entry.getKey().equals(OraxenItems.getIdByItem(itemStack)));
+    }
+
     public static Optional<ItemBuilder> getOptionalItemById(final String id) {
         return entryStream().filter(entry -> entry.getKey().equals(id)).findFirst().map(Entry::getValue);
     }
@@ -60,7 +66,7 @@ public class OraxenItems {
     public static List<ItemBuilder> getUnexcludedItems() {
         return itemStream()
                 .filter(item -> !item.getOraxenMeta().isExcludedFromInventory())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public static List<ItemBuilder> getUnexcludedItems(final File file) {
@@ -69,7 +75,7 @@ public class OraxenItems {
                 .values()
                 .stream()
                 .filter(item -> !item.getOraxenMeta().isExcludedFromInventory())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public static List<ItemStack> getItemStacksByName(final List<List<String>> lists) {
@@ -81,7 +87,7 @@ public class OraxenItems {
                         if (exists(param[1]))
                             itemStack[0] = getItemById(param[1]).build().clone();
                         else
-                            Message.ITEM_NOT_FOUND.log(Template.template("item", param[1]));
+                            Message.ITEM_NOT_FOUND.log(Utils.tagResolver("item", param[1]));
                         break;
                     case "amount":
                         itemStack[0].setAmount(Integer.parseInt(param[1]));
@@ -91,7 +97,7 @@ public class OraxenItems {
                 }
             });
             return Stream.of(itemStack[0]);
-        }).collect(Collectors.toList());
+        }).toList();
     }
 
     public static Map<File, Map<String, ItemBuilder>> getMap() {
@@ -107,7 +113,7 @@ public class OraxenItems {
     }
 
     public static Collection<ItemBuilder> getItems() {
-        return itemStream().collect(Collectors.toList());
+        return itemStream().toList();
     }
 
     @Deprecated

@@ -5,6 +5,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerItemDamageEvent;
+import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -21,23 +22,38 @@ public class DurabilityMechanicManager implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onItemDamaged(PlayerItemDamageEvent event) {
-        ItemStack item = event.getItem();
+        if (changeDurability(event.getItem(), -event.getDamage())) {
+            event.setDamage(0);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onItemMend(PlayerItemMendEvent event) {
+        if (changeDurability(event.getItem(), event.getRepairAmount())) {
+            event.setRepairAmount(0);
+        }
+    }
+
+    public boolean changeDurability(ItemStack item, int amount) {
         String itemID = OraxenItems.getIdByItem(item);
         if (factory.isNotImplementedIn(itemID))
-            return;
+            return false;
 
         DurabilityMechanic durabilityMechanic = (DurabilityMechanic) factory.getMechanic(itemID);
 
         ItemMeta itemMeta = item.getItemMeta();
-        if (itemMeta == null) return;
+        if (itemMeta == null) return false;
         PersistentDataContainer persistentDataContainer = itemMeta.getPersistentDataContainer();
         if (persistentDataContainer.has(DurabilityMechanic.NAMESPACED_KEY, PersistentDataType.INTEGER)) {
             int realDurabilityLeft = persistentDataContainer
-                    .get(DurabilityMechanic.NAMESPACED_KEY, PersistentDataType.INTEGER) - event.getDamage();
+                    .get(DurabilityMechanic.NAMESPACED_KEY, PersistentDataType.INTEGER) + amount;
             if (realDurabilityLeft > 0) {
-                double realMaxDurability = durabilityMechanic.getItemMaxDurability(); // because int rounded values suck
                 persistentDataContainer
                         .set(DurabilityMechanic.NAMESPACED_KEY, PersistentDataType.INTEGER, realDurabilityLeft);
+
+                if(!(itemMeta instanceof Damageable)) return true;
+                double realMaxDurability = durabilityMechanic.getItemMaxDurability(); // because int rounded values suck
+
                 ((Damageable) itemMeta)
                         .setDamage((int) (item.getType().getMaxDurability()
                                 - realDurabilityLeft / realMaxDurability * item.getType().getMaxDurability()));
@@ -45,9 +61,9 @@ public class DurabilityMechanicManager implements Listener {
             } else {
                 item.setAmount(0);
             }
-
+            return true;
         }
-        
+        return false;
     }
 
 }

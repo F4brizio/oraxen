@@ -5,11 +5,14 @@ import io.th0rgal.oraxen.mechanics.provided.misc.itemtype.ItemTypeMechanic;
 import io.th0rgal.oraxen.mechanics.provided.misc.itemtype.ItemTypeMechanicFactory;
 import org.bukkit.Location;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
+import org.bukkit.inventory.meta.PotionMeta;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Drop {
 
@@ -61,7 +64,7 @@ public class Drop {
 
     public boolean isTypeEnough(ItemStack itemInHand) {
         if (hasMinimalType) {
-            String itemType = getItemType(itemInHand);
+            String itemType = itemInHand == null ? "" : getItemType(itemInHand);
             return !itemType.isEmpty() && hierarchy.contains(itemType)
                     && (hierarchy.indexOf(itemType) >= hierarchy.indexOf(minimalType));
         }
@@ -75,9 +78,10 @@ public class Drop {
             if ((itemID != null && bestTools.contains(itemID.toUpperCase())
                     || bestTools.contains(type)))
                 return true;
-            else for (String toolName : bestTools)
-                if (type.endsWith(toolName.toUpperCase()))
-                    return true;
+            else
+                for (String toolName : bestTools)
+                    if (type.endsWith(toolName.toUpperCase()))
+                        return true;
             return false;
         }
         return true;
@@ -88,22 +92,44 @@ public class Drop {
     }
 
     public void spawns(Location location, ItemStack itemInHand) {
-        if (!canDrop(itemInHand))
-            return;
-
-        if (silktouch && itemInHand != null && itemInHand.hasItemMeta()
-                && itemInHand.getItemMeta().hasEnchant(Enchantment.SILK_TOUCH)) {
-            location.getWorld().dropItemNaturally(location, OraxenItems.getItemById(sourceID).build());
-            return;
-        }
+        if (!canDrop(itemInHand)) return;
+        if (!location.isWorldLoaded()) return;
 
         int fortuneMultiplier = 1;
-        if (fortune && itemInHand.getItemMeta().hasEnchant(Enchantment.LOOT_BONUS_BLOCKS))
-            fortuneMultiplier += new Random()
-                    .nextInt(itemInHand.getItemMeta().getEnchantLevel(Enchantment.LOOT_BONUS_BLOCKS));
+        if (itemInHand != null && itemInHand.hasItemMeta()) {
+            if (silktouch && itemInHand.hasItemMeta() && itemInHand.getItemMeta().hasEnchant(Enchantment.SILK_TOUCH)) {
+                location.getWorld().dropItemNaturally(location, OraxenItems.getItemById(sourceID).build());
+                return;
+            }
+
+            if (fortune && itemInHand.hasItemMeta() && itemInHand.getItemMeta().hasEnchant(Enchantment.LOOT_BONUS_BLOCKS))
+                fortuneMultiplier += ThreadLocalRandom.current()
+                        .nextInt(itemInHand.getItemMeta().getEnchantLevel(Enchantment.LOOT_BONUS_BLOCKS));
+        }
 
         for (Loot loot : loots) {
             loot.dropNaturally(location, fortuneMultiplier);
         }
+    }
+
+    public void furnitureSpawns(ItemFrame frame, ItemStack itemInHand) {
+        ItemStack drop = OraxenItems.getItemById(sourceID).build();
+        if (!canDrop(itemInHand)) return;
+        if (!drop.hasItemMeta()) return;
+        if (!frame.getLocation().isWorldLoaded()) return;
+
+        if (frame.getItem().getItemMeta() instanceof LeatherArmorMeta leatherArmorMeta) {
+            LeatherArmorMeta clone = (LeatherArmorMeta) drop.getItemMeta().clone();
+            clone.setColor(leatherArmorMeta.getColor());
+            drop.setItemMeta(clone);
+        }
+
+        if (frame.getItem().getItemMeta() instanceof PotionMeta potionMeta) {
+            PotionMeta clone = (PotionMeta) drop.getItemMeta().clone();
+            clone.setColor(potionMeta.getColor());
+            drop.setItemMeta(clone);
+        }
+
+        frame.getLocation().getWorld().dropItemNaturally(frame.getLocation(), drop);
     }
 }

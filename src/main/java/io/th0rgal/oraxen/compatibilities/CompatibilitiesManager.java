@@ -6,8 +6,9 @@ import io.th0rgal.oraxen.compatibilities.provided.itembridge.ItemBridgeCompatibi
 import io.th0rgal.oraxen.compatibilities.provided.lightapi.WrappedLightAPI;
 import io.th0rgal.oraxen.compatibilities.provided.mythicmobs.MythicMobsCompatibility;
 import io.th0rgal.oraxen.compatibilities.provided.placeholderapi.PlaceholderAPICompatibility;
+import io.th0rgal.oraxen.compatibilities.provided.worldedit.WrappedWorldEdit;
 import io.th0rgal.oraxen.config.Message;
-import net.kyori.adventure.text.minimessage.Template;
+import io.th0rgal.oraxen.utils.Utils;
 import org.bukkit.Bukkit;
 
 import java.lang.reflect.InvocationTargetException;
@@ -15,11 +16,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class CompatibilitiesManager {
 
+    private CompatibilitiesManager() {}
+
     private static final ConcurrentHashMap<String, Class<? extends CompatibilityProvider<?>>> COMPATIBILITY_PROVIDERS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, CompatibilityProvider<?>> ACTIVE_COMPATIBILITY_PROVIDERS = new ConcurrentHashMap<>();
 
     public static void enableNativeCompatibilities() {
         WrappedLightAPI.init();
+        WrappedWorldEdit.init();
         new CompatibilityListener();
         addCompatibility("PlaceholderAPI", PlaceholderAPICompatibility.class, true);
         addCompatibility("BossShopPro", BossShopProCompatibility.class, true);
@@ -41,7 +45,7 @@ public class CompatibilitiesManager {
                         get(pluginName).getConstructor().newInstance();
                 compatibilityProvider.enable(pluginName);
                 ACTIVE_COMPATIBILITY_PROVIDERS.put(pluginName, compatibilityProvider);
-                Message.PLUGIN_HOOKS.log(Template.template("plugin", pluginName));
+                Message.PLUGIN_HOOKS.log(Utils.tagResolver("plugin", pluginName));
                 return true;
             }
         } catch (final InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
@@ -58,7 +62,7 @@ public class CompatibilitiesManager {
             if (ACTIVE_COMPATIBILITY_PROVIDERS.get(pluginName).isEnabled())
                 ACTIVE_COMPATIBILITY_PROVIDERS.get(pluginName).disable();
             ACTIVE_COMPATIBILITY_PROVIDERS.remove(pluginName);
-            Message.PLUGIN_UNHOOKS.log(Template.template("plugin", pluginName));
+            Message.PLUGIN_UNHOOKS.log(Utils.tagResolver("plugin", pluginName));
             return true;
         } catch (final Exception e) {
             e.printStackTrace();

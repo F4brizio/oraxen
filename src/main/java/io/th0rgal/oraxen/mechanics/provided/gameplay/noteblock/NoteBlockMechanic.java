@@ -1,26 +1,44 @@
 package io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock;
 
+import io.th0rgal.oraxen.OraxenPlugin;
 import io.th0rgal.oraxen.compatibilities.CompatibilitiesManager;
 import io.th0rgal.oraxen.mechanics.Mechanic;
 import io.th0rgal.oraxen.mechanics.MechanicFactory;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.directional.DirectionalBlock;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.farmblock.FarmBlockDryout;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.logstrip.LogStripping;
+import io.th0rgal.oraxen.utils.actions.ClickAction;
+import io.th0rgal.oraxen.utils.blocksounds.BlockSounds;
 import io.th0rgal.oraxen.utils.drops.Drop;
 import io.th0rgal.oraxen.utils.drops.Loot;
+import io.th0rgal.oraxen.utils.limitedplacing.LimitedPlacing;
+import io.th0rgal.oraxen.utils.storage.StorageMechanic;
+import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 
 public class NoteBlockMechanic extends Mechanic {
 
+    public static final NamespacedKey FARMBLOCK_KEY = new NamespacedKey(OraxenPlugin.get(), "farmblock");
     protected final boolean hasHardness;
     private final int customVariation;
     private final Drop drop;
-    private final String breakSound;
-    private final String placeSound;
+    private final LimitedPlacing limitedPlacing;
+    private final StorageMechanic storage;
+    private final BlockSounds blockSounds;
     private String model;
     private int period;
     private final int light;
+    private final boolean canIgnite;
+    private final FarmBlockDryout farmBlockDryout;
+    private final LogStripping logStripping;
+    private final DirectionalBlock directionalBlock;
+    private final List<ClickAction> clickActions;
 
     @SuppressWarnings("unchecked")
     public NoteBlockMechanic(MechanicFactory mechanicFactory, ConfigurationSection section) {
@@ -33,16 +51,6 @@ public class NoteBlockMechanic extends Mechanic {
             model = section.getString("model");
 
         customVariation = section.getInt("custom_variation");
-
-        if (section.isString("break_sound"))
-            breakSound = section.getString("break_sound");
-        else
-            breakSound = null;
-
-        if (section.isString("place_sound"))
-            placeSound = section.getString("place_sound");
-        else
-            placeSound = null;
 
         List<Loot> loots = new ArrayList<>();
         if (section.isConfigurationSection("drop")) {
@@ -73,7 +81,56 @@ public class NoteBlockMechanic extends Mechanic {
         } else hasHardness = false;
 
         light = section.getInt("light", -1);
+        clickActions = ClickAction.parseList(section);
+        canIgnite = section.getBoolean("can_ignite", false);
+
+        if (section.isConfigurationSection("farmblock")) {
+            farmBlockDryout = new FarmBlockDryout(getItemID(), Objects.requireNonNull(section.getConfigurationSection("farmblock")));
+            ((NoteBlockMechanicFactory) getFactory()).registerFarmBlock();
+        } else farmBlockDryout = null;
+
+        if (section.isConfigurationSection("logStrip")) {
+            logStripping = new LogStripping(Objects.requireNonNull(section.getConfigurationSection("logStrip")));
+        } else logStripping = null;
+
+        if (section.isConfigurationSection("directional")) {
+            directionalBlock = new DirectionalBlock(Objects.requireNonNull(section.getConfigurationSection("directional")));
+        } else directionalBlock = null;
+
+        if (section.isConfigurationSection("limited_placing")) {
+            limitedPlacing = new LimitedPlacing(Objects.requireNonNull(section.getConfigurationSection("limited_placing")));
+        } else limitedPlacing = null;
+
+        if (section.isConfigurationSection("storage")) {
+            storage = new StorageMechanic(Objects.requireNonNull(section.getConfigurationSection("storage")));
+        } else storage = null;
+
+        if (section.isConfigurationSection("block_sounds")) {
+            blockSounds = new BlockSounds(Objects.requireNonNull(section.getConfigurationSection("block_sounds")));
+        } else blockSounds = null;
     }
+
+    public boolean hasLimitedPlacing() { return limitedPlacing != null; }
+    public LimitedPlacing getLimitedPlacing() { return limitedPlacing; }
+
+    public boolean isStorage() { return storage != null; }
+    public StorageMechanic getStorage() { return storage; }
+
+    public boolean hasBlockSounds() { return blockSounds != null; }
+    public BlockSounds getBlockSounds() { return blockSounds; }
+
+    public boolean hasDryout() {
+        return farmBlockDryout != null;
+    }
+    public FarmBlockDryout getDryout() {
+        return farmBlockDryout;
+    }
+
+    public boolean isLog() { return logStripping != null; }
+    public LogStripping getLog() { return logStripping; }
+
+    public boolean isDirectional() { return directionalBlock != null; }
+    public DirectionalBlock getDirectional() { return directionalBlock; }
 
     public String getModel(ConfigurationSection section) {
         if (model != null)
@@ -90,28 +147,26 @@ public class NoteBlockMechanic extends Mechanic {
         return drop;
     }
 
-    public boolean hasBreakSound() {
-        return breakSound != null;
-    }
-
-    public String getBreakSound() {
-        return breakSound;
-    }
-
-    public boolean hasPlaceSound() {
-        return placeSound != null;
-    }
-
-    public String getPlaceSound() {
-        return placeSound;
-    }
-
     public int getPeriod() {
         return period;
     }
 
     public int getLight() {
         return light;
+    }
+
+    public boolean canIgnite() {
+        return canIgnite;
+    }
+
+    public boolean hasClickActions() { return !clickActions.isEmpty(); }
+
+    public void runClickActions(final Player player) {
+        for (final ClickAction action : clickActions) {
+            if (action.canRun(player)) {
+                action.performActions(player);
+            }
+        }
     }
 
 }

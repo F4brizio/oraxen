@@ -17,9 +17,10 @@ import io.th0rgal.oraxen.utils.CustomArmorsTextures;
 import io.th0rgal.oraxen.utils.Utils;
 import io.th0rgal.oraxen.utils.VirtualFile;
 import io.th0rgal.oraxen.utils.ZipUtils;
-import net.kyori.adventure.text.minimessage.Template;
-import net.kyori.adventure.text.minimessage.template.TemplateResolver;
+import io.th0rgal.oraxen.utils.logs.Logs;
+import org.apache.commons.io.IOUtils;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.*;
@@ -38,9 +39,6 @@ public class ResourcePack {
     private Map<String, Collection<Consumer<File>>> packModifiers;
     private Map<String, VirtualFile> outputFiles;
     private CustomArmorsTextures customArmorsTextures;
-    private File modelsFolder;
-    private File fontFolder;
-    private File assetsFolder;
     private File packFolder;
     private File pack;
     JavaPlugin plugin;
@@ -60,20 +58,33 @@ public class ResourcePack {
         customArmorsTextures = new CustomArmorsTextures((int) Settings.ARMOR_RESOLUTION.getValue());
         packFolder = new File(plugin.getDataFolder(), "pack");
         makeDirsIfNotExists(packFolder);
+        makeDirsIfNotExists(new File(packFolder, "assets"));
         pack = new File(packFolder, packFolder.getName() + ".zip");
-        assetsFolder = new File(packFolder, "assets");
-        modelsFolder = new File(packFolder, "models");
-        fontFolder = new File(packFolder, "font");
-        final File langFolder = new File(packFolder, "lang");
-        extractFolders(!modelsFolder.exists(), !new File(packFolder, "textures").exists(),
-                !new File(packFolder, "shaders").exists(),
-                !langFolder.exists(), !new File(packFolder, "sounds").exists(), !assetsFolder.exists());
+        File assetsFolder = new File(packFolder, "assets");
+        File modelsFolder = new File(packFolder, "models");
+        File fontFolder = new File(packFolder, "font");
+        File optifineFolder = new File(packFolder, "optifine");
+        File langFolder = new File(packFolder, "lang");
+        File textureFolder = new File(packFolder, "textures");
+        File shaderFolder = new File(packFolder, "shaders");
+        File soundFolder = new File(packFolder, "sounds");
+
+        if (Settings.GENERATE_DEFAULT_ASSETS.toBool())
+            extractFolders(!modelsFolder.exists(), !textureFolder.exists(),
+                    !shaderFolder.exists(), !langFolder.exists(), !fontFolder.exists(),
+                    !soundFolder.exists(), !assetsFolder.exists(), !optifineFolder.exists());
+        else extractRequired();
 
         if (!Settings.GENERATE.toBool())
             return;
 
-        if (pack.exists())
-            pack.delete();
+        if (pack.exists()) {
+            try {
+                Files.delete(pack.toPath());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
 
         extractInPackIfNotExists(plugin, new File(packFolder, "pack.mcmeta"));
         extractInPackIfNotExists(plugin, new File(packFolder, "pack.png"));
@@ -94,19 +105,19 @@ public class ResourcePack {
                     packFolder.getName() + ".zip");
 
             // needs to be ordered, forEach cannot be used
-            for (final File folder : packFolder.listFiles())
+            File[] files = packFolder.listFiles();
+            if (files != null) for (final File folder : files)
                 if (folder.isDirectory() && folder.getName().equalsIgnoreCase("assets"))
                     getAllFiles(folder, output, "");
                 else if (folder.isDirectory())
                     getAllFiles(folder, output, "assets/minecraft");
 
             if (customArmorsTextures.hasCustomArmors()) {
-                output.add(new VirtualFile("assets/minecraft/textures/models/armor",
-                        "leather_layer_1.png",
-                        customArmorsTextures.getLayerOne()));
-                output.add(new VirtualFile("assets/minecraft/textures/models/armor",
-                        "leather_layer_2.png",
-                        customArmorsTextures.getLayerTwo()));
+                String armorPath = "assets/minecraft/textures/models/armor";
+                output.add(new VirtualFile(armorPath, "leather_layer_1.png", customArmorsTextures.getLayerOne()));
+                output.add(new VirtualFile(armorPath, "leather_layer_2.png", customArmorsTextures.getLayerTwo()));
+                if (customArmorsTextures.shouldGenerateOptifineFiles())
+                    output.addAll(customArmorsTextures.getOptifineFiles());
             }
             Collections.sort(output);
         } catch (IOException e) {
@@ -116,8 +127,8 @@ public class ResourcePack {
     }
 
     private void extractFolders(boolean extractModels, boolean extractTextures, boolean extractShaders,
-                                boolean extractLang, boolean extractSounds, boolean extractAssets) {
-        if (!extractModels && !extractTextures && !extractShaders && !extractLang && !extractAssets)
+                                boolean extractLang, boolean extractFonts, boolean extractSounds, boolean extractAssets, boolean extractOptifine) {
+        if (!extractModels && !extractTextures && !extractShaders && !extractLang && !extractAssets && !extractOptifine)
             return;
         final ZipInputStream zip = ResourcesManager.browse();
         try {
@@ -125,7 +136,25 @@ public class ResourcePack {
             final ResourcesManager resourcesManager = new ResourcesManager(OraxenPlugin.get());
             while (entry != null) {
                 extract(entry, extractModels, extractTextures,
-                        extractLang, extractSounds, extractAssets, resourcesManager);
+                        extractLang, extractFonts, extractSounds, extractAssets, extractOptifine, resourcesManager);
+                entry = zip.getNextEntry();
+            }
+            zip.closeEntry();
+            zip.close();
+        } catch (final IOException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    private void extractRequired() {
+        final ZipInputStream zip = ResourcesManager.browse();
+        try {
+            ZipEntry entry = zip.getNextEntry();
+            final ResourcesManager resourcesManager = new ResourcesManager(OraxenPlugin.get());
+            while (entry != null) {
+                if (entry.getName().startsWith("pack/textures/required") || entry.getName().startsWith("pack/models/required")) {
+                    resourcesManager.extractFileIfTrue(entry, entry.getName(), true);
+                }
                 entry = zip.getNextEntry();
             }
             zip.closeEntry();
@@ -136,16 +165,18 @@ public class ResourcePack {
     }
 
     private void extract(ZipEntry entry, boolean extractModels,
-                         boolean extractTextures, boolean extractLang,
+                         boolean extractTextures, boolean extractLang, boolean extractFonts,
                          boolean extractSounds, boolean extractAssets,
-                         ResourcesManager resourcesManager) {
+                         boolean extractOptifine, ResourcesManager resourcesManager) {
         final String name = entry.getName();
         final boolean isSuitable = (extractModels && name.startsWith("pack/models"))
                 || (extractTextures && name.startsWith("pack/textures"))
                 || (extractTextures && name.startsWith("pack/shaders"))
                 || (extractLang && name.startsWith("pack/lang"))
+                || (extractFonts && name.startsWith("pack/font"))
                 || (extractSounds && name.startsWith("pack/sounds"))
-                || (extractAssets && name.startsWith("/pack/assets"));
+                || (extractAssets && name.startsWith("/pack/assets"))
+                || (extractOptifine && name.startsWith("pack/optifine"));
         resourcesManager.extractFileIfTrue(entry, name, isSuitable);
     }
 
@@ -235,9 +266,44 @@ public class ResourcePack {
         if (!soundManager.isAutoGenerate())
             return;
         final JsonObject output = new JsonObject();
-        for (CustomSound sound : soundManager.getCustomSounds())
+
+        for (CustomSound sound : handleCustomSoundEntries(soundManager.getCustomSounds()))
             output.add(sound.getName(), sound.toJson());
-        writeStringToVirtual("assets/oraxen", "sounds.json", output.toString());
+        writeStringToVirtual("assets/minecraft", "sounds.json", output.toString());
+    }
+
+    private Collection<CustomSound> handleCustomSoundEntries(Collection<CustomSound> sounds) {
+        ConfigurationSection mechanic = OraxenPlugin.get().getConfigsManager().getMechanics();
+        ConfigurationSection customSounds = mechanic.getConfigurationSection("custom_block_sounds");
+        ConfigurationSection noteblock = mechanic.getConfigurationSection("noteblock");
+        ConfigurationSection stringblock = mechanic.getConfigurationSection("stringblock");
+        ConfigurationSection furniture = mechanic.getConfigurationSection("furniture");
+        ConfigurationSection block = mechanic.getConfigurationSection("block");
+
+        if (customSounds == null) {
+            sounds.removeIf(s -> s.getName().startsWith("required.wood") || s.getName().startsWith("block.wood"));
+            sounds.removeIf(s -> s.getName().startsWith("required.stone") || s.getName().startsWith("block.stone"));
+        } else if (!customSounds.getBoolean("noteblock_and_block", true)) {
+            sounds.removeIf(s -> s.getName().startsWith("required.wood") || s.getName().startsWith("block.wood"));
+        } else if (!customSounds.getBoolean("stringblock_and_furniture", true)) {
+            sounds.removeIf(s -> s.getName().startsWith("required.stone") || s.getName().startsWith("block.stone"));
+        } else if ((noteblock != null && !noteblock.getBoolean("enabled", true) && block != null && block.getBoolean("enabled", false))) {
+            sounds.removeIf(s -> s.getName().startsWith("required.wood") || s.getName().startsWith("block.wood"));
+        } else if (stringblock != null && !stringblock.getBoolean("enabled", true) && furniture != null && furniture.getBoolean("enabled", true)) {
+            sounds.removeIf(s -> s.getName().startsWith("required.stone") || s.getName().startsWith("block.stone"));
+        }
+
+        // Clear the sounds.json file of yaml configuration entries that should not be there
+        sounds.removeIf(s ->
+                s.getName().equals("required") ||
+                        s.getName().equals("block") ||
+                        s.getName().equals("block.wood") ||
+                        s.getName().equals("block.stone") ||
+                        s.getName().equals("required.wood") ||
+                        s.getName().equals("required.stone")
+        );
+
+        return sounds;
     }
 
     public void writeStringToVirtual(String folder, String name, String content) {
@@ -250,7 +316,7 @@ public class ResourcePack {
                              final String... blacklisted) {
         final File[] files = directory.listFiles();
         final List<String> blacklist = Arrays.asList(blacklisted);
-        for (final File file : files) {
+        if (files != null) for (final File file : files) {
             if (!blacklist.contains(file.getName()) && !file.isDirectory())
                 readFileToVirtuals(fileList, file, newFolder);
             if (file.isDirectory())
@@ -262,7 +328,7 @@ public class ResourcePack {
                                   String newFolder,
                                   final String... blacklisted) {
         final File[] files = dir.listFiles();
-        for (final File file : files)
+        if (files != null) for (final File file : files)
             if (!file.isDirectory() && !Arrays.asList(blacklisted).contains(file.getName()))
                 readFileToVirtuals(fileList, file, newFolder);
     }
@@ -284,9 +350,25 @@ public class ResourcePack {
     }
 
     private InputStream processJsonFile(File file) throws IOException {
-        String content = Files.readString(Path.of(file.getPath()), StandardCharsets.UTF_8);
-        content = Utils.LEGACY_COMPONENT_SERIALIZER.serialize(Utils.MINI_MESSAGE.deserialize(content,
-                TemplateResolver.templates(Template.template("prefix", Message.PREFIX.toComponent()))));
+        String content;
+        if (!file.exists())
+            return new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8));
+        try {
+            content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        } catch (IOException | NullPointerException e) {
+            Logs.logError("Error while reading file " + file.getPath());
+            Logs.logError("It seems to be malformed!");
+            return new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8));
+        } finally {
+            IOUtils.closeQuietly();
+        }
+
+        // Serialize legacy to component then deserialize to adventure style tags
+        content = Utils.MINI_MESSAGE.serialize(Utils.LEGACY_COMPONENT_SERIALIZER.deserialize(content)).replace("\\<", "<").replace("\\>", ">");
+        // Deserialize said component to a string to handle other tags like glyphs
+        content = Utils.MINI_MESSAGE.serialize(Utils.MINI_MESSAGE.deserialize(content, Utils.tagResolver("prefix", Message.PREFIX.toString())));
+        // Deserialize adventure component to legacy format due to resourcepacks not supporting adventure components
+        content = Utils.LEGACY_COMPONENT_SERIALIZER.serialize(Utils.MINI_MESSAGE.deserialize(content));
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
 

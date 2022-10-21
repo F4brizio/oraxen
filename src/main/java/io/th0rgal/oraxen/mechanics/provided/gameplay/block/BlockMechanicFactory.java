@@ -22,10 +22,12 @@ public class BlockMechanicFactory extends MechanicFactory {
     private static final List<JsonObject> MUSHROOM_STEM_BLOCKSTATE_OVERRIDES = new ArrayList<>();
     private static final Map<Integer, BlockMechanic> BLOCK_PER_VARIATION = new HashMap<>();
     public final List<String> toolTypes;
+    public final boolean customSounds;
 
     public BlockMechanicFactory(ConfigurationSection section) {
         super(section);
         toolTypes = section.getStringList("tool_types");
+        customSounds = section.getBoolean("custom_sounds", true);
 
         // this modifier should be executed when all the items have been parsed, just
         // before zipping the pack
@@ -34,13 +36,14 @@ public class BlockMechanicFactory extends MechanicFactory {
                         .writeStringToVirtual("assets/minecraft/blockstates",
                                 "mushroom_stem.json", getBlockstateContent()));
         MechanicsManager.registerListeners(OraxenPlugin.get(), new BlockMechanicListener(this));
+        if (customSounds) MechanicsManager.registerListeners(OraxenPlugin.get(), new BlockSoundListener());
     }
 
     private String getBlockstateContent() {
         JsonObject mushroomStem = new JsonObject();
         JsonArray multipart = new JsonArray();
         // adds default override
-        multipart.add(getBlockstateOverride("required/mushroom_stem", 15));
+        multipart.add(getBlockstateOverride("block/mushroom_stem", 15));
         for (JsonObject override : MUSHROOM_STEM_BLOCKSTATE_OVERRIDES)
             multipart.add(override);
         mushroomStem.add("multipart", multipart);
@@ -69,6 +72,11 @@ public class BlockMechanicFactory extends MechanicFactory {
 
     public static BlockMechanic getBlockMechanic(int customVariation) {
         return BLOCK_PER_VARIATION.get(customVariation);
+    }
+
+    public static BlockMechanic getBlockMechanic(Block block) {
+        return (block.getType() == Material.MUSHROOM_STEM)
+                ? BLOCK_PER_VARIATION.get(BlockMechanic.getCode(block)) : null;
     }
 
     /**

@@ -5,6 +5,9 @@ import io.th0rgal.oraxen.OraxenPlugin;
 import io.th0rgal.oraxen.mechanics.Mechanic;
 import io.th0rgal.oraxen.mechanics.MechanicFactory;
 import io.th0rgal.oraxen.mechanics.MechanicsManager;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.directional.DirectionalBlock;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.farmblock.FarmBlockTask;
+import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.logstrip.LogStripListener;
 import org.bukkit.Bukkit;
 import org.bukkit.Instrument;
 import org.bukkit.Material;
@@ -16,6 +19,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class NoteBlockMechanicFactory extends MechanicFactory {
 
@@ -23,23 +27,32 @@ public class NoteBlockMechanicFactory extends MechanicFactory {
     private static JsonObject variants;
     private static NoteBlockMechanicFactory instance;
     public final List<String> toolTypes;
+    private boolean farmBlock;
+    private static FarmBlockTask farmBlockTask;
+    public final int farmBlockCheckDelay;
+    public final boolean customSounds;
 
     public NoteBlockMechanicFactory(ConfigurationSection section) {
         super(section);
         instance = this;
         variants = new JsonObject();
-        variants.add("instrument=harp,powered=false", getModelJson("required/note_block"));
+        variants.add("instrument=harp,powered=false", getModelJson("block/note_block"));
         toolTypes = section.getStringList("tool_types");
+        farmBlockCheckDelay = section.getInt("farmblock_check_delay");
+        farmBlock = false;
+        customSounds = section.getBoolean("custom_sounds", true);
 
         // this modifier should be executed when all the items have been parsed, just
         // before zipping the pack
         OraxenPlugin.get().getResourcePack().addModifiers(getMechanicID(),
-                packFolder -> {
-                    OraxenPlugin.get().getResourcePack()
-                            .writeStringToVirtual("assets/minecraft/blockstates",
-                                    "note_block.json", getBlockstateContent());
-                });
+                packFolder ->
+                        OraxenPlugin.get().getResourcePack()
+                                .writeStringToVirtual("assets/minecraft/blockstates",
+                                        "note_block.json", getBlockstateContent())
+        );
         MechanicsManager.registerListeners(OraxenPlugin.get(), new NoteBlockMechanicListener(this));
+        MechanicsManager.registerListeners(OraxenPlugin.get(), new LogStripListener(this));
+        if (customSounds) MechanicsManager.registerListeners(OraxenPlugin.get(), new NoteBlockSoundListener());
     }
 
     public static String getInstrumentName(int id) {
@@ -66,6 +79,36 @@ public class NoteBlockMechanicFactory extends MechanicFactory {
     public static JsonObject getModelJson(String modelName) {
         JsonObject content = new JsonObject();
         content.addProperty("model", modelName);
+
+        return content;
+    }
+
+    public static JsonObject getDirectionalModelJson(String modelName, String itemId, NoteBlockMechanic mechanic, NoteBlockMechanic parentMechanic) {
+        JsonObject content = new JsonObject();
+        DirectionalBlock parent = parentMechanic.getDirectional();
+        String subBlockModel = mechanic.getDirectional().getDirectionalModel(mechanic);
+        content.addProperty("model", subBlockModel == null ? modelName : subBlockModel);
+
+        if (Objects.equals(parent.getYBlock(), itemId))
+            return content;
+        else if (Objects.equals(parent.getXBlock(), itemId))
+            content.addProperty("x", 90);
+        else if (Objects.equals(parent.getZBlock(), itemId)) {
+            content.addProperty("y", 90);
+            content.addProperty("x", 90);
+        } else if (Objects.equals(parent.getNorthBlock(), itemId))
+            return content;
+        else if (Objects.equals(parent.getEastBlock(), itemId))
+            content.addProperty("x", 90);
+        else if (Objects.equals(parent.getSouthBlock(), itemId))
+            content.addProperty("y", 180);
+        else if (Objects.equals(parent.getWestBlock(), itemId))
+            content.addProperty("y", 270);
+        else if (Objects.equals(parent.getUpBlock(), itemId))
+            return content;
+        else if (Objects.equals(parent.getDownBlock(), itemId))
+            content.addProperty("x", 180);
+
         return content;
     }
 
@@ -108,9 +151,19 @@ public class NoteBlockMechanicFactory extends MechanicFactory {
     @Override
     public Mechanic parse(ConfigurationSection itemMechanicConfiguration) {
         NoteBlockMechanic mechanic = new NoteBlockMechanic(this, itemMechanicConfiguration);
-        variants.add(getBlockstateVariantName(mechanic.getCustomVariation()),
-                getModelJson(mechanic.getModel(itemMechanicConfiguration.getParent()
-                        .getParent())));
+        DirectionalBlock directional = mechanic.getDirectional();
+        String modelName = mechanic.getModel(itemMechanicConfiguration.getParent().getParent());
+
+        if (mechanic.isDirectional() && !directional.isParentBlock()) {
+            NoteBlockMechanic parentMechanic = mechanic.getDirectional().getParentBlockMechanic(mechanic);
+            modelName = (parentMechanic.getModel(itemMechanicConfiguration.getParent().getParent()));
+            variants.add(getBlockstateVariantName(mechanic.getCustomVariation()),
+                    getDirectionalModelJson(modelName, mechanic.getItemID(), mechanic, parentMechanic));
+        } else {
+            variants.add(getBlockstateVariantName(mechanic.getCustomVariation()),
+                    getModelJson(modelName));
+        }
+
         BLOCK_PER_VARIATION.put(mechanic.getCustomVariation(), mechanic);
         addToImplemented(mechanic);
         return mechanic;
@@ -146,6 +199,26 @@ public class NoteBlockMechanicFactory extends MechanicFactory {
          * will be reserved for the vanilla behavior. We still have 800-25 = 775 variations
          */
         return createNoteBlockData(((NoteBlockMechanic) getInstance().getMechanic(itemID)).getCustomVariation());
+    }
+
+    public void registerFarmBlock() {
+        if (farmBlock) return;
+        if (farmBlockTask != null) farmBlockTask.cancel();
+
+//        // Dont register if there is no farmblocks in configs
+//        List<String> farmblockList = new ArrayList<>();
+//        for (ItemBuilder itemBuilder : OraxenItems.getItems()) {
+//            String id = OraxenItems.getIdByItem(itemBuilder.build());
+//            NoteBlockMechanic mechanic = (NoteBlockMechanic) NoteBlockMechanicFactory.getInstance().getMechanic(id);
+//            if (mechanic == null || !mechanic.hasDryout()) continue;
+//            farmblockList.add(id);
+//        }
+//        if (farmblockList.isEmpty()) return;
+
+        farmBlockTask = new FarmBlockTask(farmBlockCheckDelay);
+
+        farmBlockTask.runTaskTimer(OraxenPlugin.get(), 0, farmBlockCheckDelay);
+        farmBlock = true;
     }
 
 }

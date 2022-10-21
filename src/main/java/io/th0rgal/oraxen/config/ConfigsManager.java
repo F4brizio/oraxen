@@ -6,7 +6,6 @@ import io.th0rgal.oraxen.items.ItemBuilder;
 import io.th0rgal.oraxen.items.ItemParser;
 import io.th0rgal.oraxen.utils.Utils;
 import io.th0rgal.oraxen.utils.logs.Logs;
-import net.kyori.adventure.text.minimessage.Template;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -16,28 +15,38 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class ConfigsManager {
 
     private final JavaPlugin plugin;
+    private final YamlConfiguration defaultMechanics;
     private final YamlConfiguration defaultSettings;
     private final YamlConfiguration defaultFont;
     private final YamlConfiguration defaultSound;
     private final YamlConfiguration defaultLanguage;
+    private final YamlConfiguration defaultHud;
+    private YamlConfiguration mechanics;
     private YamlConfiguration settings;
     private YamlConfiguration font;
     private YamlConfiguration sound;
     private YamlConfiguration language;
+    private YamlConfiguration hud;
     private File itemsFolder;
     private File glyphsFolder;
+    private File schematicsFolder;
 
     public ConfigsManager(JavaPlugin plugin) {
         this.plugin = plugin;
+        defaultMechanics = extractDefault("mechanics.yml");
         defaultSettings = extractDefault("settings.yml");
         defaultFont = extractDefault("font.yml");
         defaultSound = extractDefault("sound.yml");
         defaultLanguage = extractDefault("languages/english.yml");
+        defaultHud = extractDefault("hud.yml");
+    }
+
+    public YamlConfiguration getMechanics() {
+        return mechanics != null ? mechanics : defaultMechanics;
     }
 
     public YamlConfiguration getSettings() {
@@ -52,8 +61,16 @@ public class ConfigsManager {
         return font != null ? font : defaultFont;
     }
 
+    public YamlConfiguration getHud() {
+        return hud != null ? hud : defaultHud;
+    }
+
     public YamlConfiguration getSound() {
         return sound != null ? sound : defaultSound;
+    }
+
+    public File getSchematicsFolder() {
+        return schematicsFolder;
     }
 
     private YamlConfiguration extractDefault(String source) {
@@ -71,8 +88,10 @@ public class ConfigsManager {
 
     public boolean validatesConfig() {
         ResourcesManager resourcesManager = new ResourcesManager(OraxenPlugin.get());
+        mechanics = validate(resourcesManager, "mechanics.yml", defaultMechanics);
         settings = validate(resourcesManager, "settings.yml", defaultSettings);
         font = validate(resourcesManager, "font.yml", defaultFont);
+        hud = validate(resourcesManager, "hud.yml", defaultHud);
         sound = validate(resourcesManager, "sound.yml", defaultSound);
         File languagesFolder = new File(plugin.getDataFolder(), "languages");
         languagesFolder.mkdir();
@@ -83,14 +102,25 @@ public class ConfigsManager {
         itemsFolder = new File(plugin.getDataFolder(), "items");
         if (!itemsFolder.exists()) {
             itemsFolder.mkdirs();
-            new ResourcesManager(plugin).extractConfigsInFolder("items", "yml");
+            if (Settings.GENERATE_DEFAULT_CONFIGS.toBool())
+                new ResourcesManager(plugin).extractConfigsInFolder("items", "yml");
         }
 
         // check glyphsFolder
         glyphsFolder = new File(plugin.getDataFolder(), "glyphs");
         if (!glyphsFolder.exists()) {
             glyphsFolder.mkdirs();
-            new ResourcesManager(plugin).extractConfigsInFolder("glyphs", "yml");
+            if (Settings.GENERATE_DEFAULT_CONFIGS.toBool())
+                new ResourcesManager(plugin).extractConfigsInFolder("glyphs", "yml");
+            else new ResourcesManager(plugin).extractConfiguration("glyphs/interface.yml");
+        }
+
+        // check schematicsFolder
+        schematicsFolder = new File(plugin.getDataFolder(), "schematics");
+        if (!schematicsFolder.exists()) {
+            schematicsFolder.mkdirs();
+            if (Settings.GENERATE_DEFAULT_CONFIGS.toBool())
+                new ResourcesManager(plugin).extractConfigsInFolder("schematics", "schem");
         }
 
         return true; // todo : return false when an error is detected + prints a detailed error
@@ -103,7 +133,7 @@ public class ConfigsManager {
         for (String key : defaultConfiguration.getKeys(true))
             if (configuration.get(key) == null) {
                 updated = true;
-                Message.UPDATING_CONFIG.log(Template.template("option", key));
+                Message.UPDATING_CONFIG.log(Utils.tagResolver("option", key));
                 configuration.set(key, defaultConfiguration.get(key));
             }
         if (updated)
@@ -120,7 +150,7 @@ public class ConfigsManager {
         List<File> configs = Arrays
                 .stream(getGlyphsFiles())
                 .filter(file -> file.getName().endsWith(".yml"))
-                .collect(Collectors.toList());
+                .toList();
         Map<String, Integer> codePerGlyph = new HashMap<>();
         for (File file : configs) {
             YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
@@ -144,6 +174,7 @@ public class ConfigsManager {
                 Glyph glyph = new Glyph(key, configuration.getConfigurationSection(key), code);
                 if (glyph.isFileChanged())
                     fileChanged = true;
+                glyph.verifyGlyph(output);
                 output.add(glyph);
             }
             if (fileChanged && Settings.AUTOMATICALLY_SET_GLYPH_CODE.toBool())
@@ -167,7 +198,7 @@ public class ConfigsManager {
         List<File> configs = Arrays
                 .stream(getItemsFiles())
                 .filter(file -> file.getName().endsWith(".yml"))
-                .collect(Collectors.toList());
+                .toList();
         for (File file : configs)
             parseMap.put(file, parseItemConfigs(YamlConfiguration.loadConfiguration(file), file));
         return parseMap;
@@ -191,11 +222,9 @@ public class ConfigsManager {
             try {
                 map.put(entry.getKey(), itemParser.buildItem());
             } catch (Exception e) {
-                map
-                        .put(entry.getKey(),
-                                errorItem
-                                        .buildItem(String.valueOf(ChatColor.DARK_RED) + ChatColor.BOLD
-                                                + e.getClass().getSimpleName() + ": " + ChatColor.RED + entry.getKey()));
+                map.put(entry.getKey(),
+                        errorItem.buildItem(String.valueOf(ChatColor.DARK_RED) + ChatColor.BOLD
+                                + e.getClass().getSimpleName() + ": " + ChatColor.RED + entry.getKey()));
                 Logs.logError("ERROR BUILDING ITEM \"" + entry.getKey() + "\"");
                 e.printStackTrace();
             }

@@ -10,7 +10,6 @@ import io.th0rgal.oraxen.font.FontManager;
 import io.th0rgal.oraxen.items.ItemBuilder;
 import io.th0rgal.oraxen.items.OraxenItems;
 import io.th0rgal.oraxen.utils.Utils;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -28,16 +27,16 @@ public class ItemsView {
     private final YamlConfiguration settings = new ResourcesManager(OraxenPlugin.get()).getSettings();
     private final FontManager fontManager = OraxenPlugin.get().getFontManager();
     private final String baseMenuTexture = ChatColor.WHITE +
-            fontManager.getShift(18) +
+            fontManager.getShift(-18) +
             fontManager.getGlyphFromName("menu_items").getCharacter() +
-            fontManager.getShift(193);
+            fontManager.getShift(-193);
     ChestGui mainGui;
 
     public ChestGui create() {
         final Map<File, ChestGui> files = new HashMap<>();
         for (final File file : OraxenItems.getMap().keySet()) {
             final List<ItemBuilder> unexcludedItems = OraxenItems.getUnexcludedItems(file);
-            if (unexcludedItems.size() > 0)
+            if (!unexcludedItems.isEmpty())
                 files.put(file, createSubGUI(file.getName(), unexcludedItems));
         }
         final int rows = (files.size() - 1) / 9 + 1;
@@ -129,11 +128,7 @@ public class ItemsView {
 
     private ItemStack getItemStack(final File file) {
         ItemStack itemStack;
-        String material = settings
-                .getString(String.format("gui_inventory.%s.icon", Utils.removeExtension(file.getName())),
-                        "PAPER");
-        if (material == null)
-            material = "PAPER";
+        String material = settings.getString(String.format("gui_inventory.%s.icon", Utils.removeExtension(file.getName())), "PAPER");
 
         try {
             itemStack = new ItemBuilder(OraxenItems.getItemById(material).build())
@@ -163,6 +158,6 @@ public class ItemsView {
 
     private String getMenuTexture(final String color) {
         return baseMenuTexture + Utils.LEGACY_COMPONENT_SERIALIZER.serialize(Utils.MINI_MESSAGE
-                .parse(color + fontManager.getGlyphFromName("menu_items_overlay").getCharacter()));
+                .deserialize(color + fontManager.getGlyphFromName("menu_items_overlay").getCharacter()));
     }
 }
