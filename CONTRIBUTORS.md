@@ -6,12 +6,13 @@
 
 > Developers who have contributed to the source code
 
-* [AntoineJT](https://github.com/AntoineJT): made greats refactors.
+* [Boy0000](https://github.com/Boy0000): Main maintainer of plugin, responsible for adding several mechanics, fixing bugs, and improving the code quality.
+* [AntoineJT](https://github.com/AntoineJT): made great refactors.
 * [yzl210](https://github.com/yzl210): active contributor, introduced mythicmobs support, shapeless+furnace recipes and
   much more
-* [Lauriichan](https://github.com/Lauriichan): did a great work with the recipes, commands and multiple refactors
+* [Lauriichan](https://github.com/Lauriichan): did a great job with the recipes, commands and multiple refactors
 * [Brett Saunders](https://github.com/brettsaunders21): introduced an awesome display inventory for recipes
-* [DoctaEnkoda](https://github.com/DoctaEnkoda): multiple improvements (worked on recipes and fixed bugs)
+* [Euphyllia](https://github.com/Euphillya): multiple improvements (worked on recipes and fixed bugs) and work on Folia Support
 * [Karlatemp](https://github.com/Karlatemp): added support for external hosting providers
 * [Auxilor](https://github.com/Auxilor): fixed jitpack configuration
 * [MrMicky](https://github.com/MrMicky-FR): developer of [FastInv](https://github.com/MrMicky-FR/FastInv) (used in this
